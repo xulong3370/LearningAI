@@ -32,7 +32,7 @@ $其中输入x=\{x_1,x_2,x_3,...,x_n\}，输出为y=\{y_1,y_2,...,y_j\}，隐含
 图（1-3）: 基本的RNN单元  
 
 运算图形实际上就是展示了RNN单元内部神经网络的实际运算逻辑，对于如上计算单元的实现，可以分为下面几步公式：  
-- 通过上一步输入的隐含状态$a^{[t-1]}$计算当前单元的$a^{[t]}$：  
+- 通过上一步输入的隐含状态$a^{\langle t-1 \rangle}$计算当前单元的$a^{\langle t \rangle}$：  
 $$a^{\langle t \rangle} = \tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a) \tag{1.1}$$ 
 - 通过当前隐含层$a^{[t]}$计算$\hat{y}^{\langle t \rangle}$
 $$\hat{y}^{\langle t \rangle} = softmax(W_{ya} a^{\langle t \rangle} + b_y) \tag{1.2}$$  
@@ -143,14 +143,53 @@ def rnn_forward(x, a0, parameters):
 ```
 
 ### 1.3 RNN反向转播的计算
+RNN反向传播跟一般的神经网络模型有一些区别，就是需要做递归操作，这里先看如下图，之后再慢慢解释：  
+
+![Alt text](images/RNN-backward.png)   
+图（1-4）: RNN单元的反向传播
+
+对于RNN，我们在序列的每个单元都存在损失函数，我们把损失函数定义为$J$。训练本质就是求$(W_{ax},W_{aa},b_a,W_{ya},b_y)$合适的值（注意在序列每个CELL中，这些值都是共用的，即RNN序列共用一套权重），采用梯度下降法求他们的梯度并更新这些值。  
+RNN对于序列输入 $\{x^{\langle 1 \rangle}, x^{\langle 2 \rangle}, ..., x^{\langle T_x \rangle}\}$,  会有序列输出 $\{y^{\langle 1 \rangle}, y^{\langle 2 \rangle}, ..., x^{\langle T_y \rangle}\}$。最后的损失函数$J$是把各个时间点$y^{\langle t \rangle}$的单个 $J^{\langle t \rangle}$ 加起来。根据导数的性质（和的导数等于导数的和），可以化解成对每个$J^{\langle t \rangle}$求导，最后加起来。    
+
+首先对于某一个单元可知：  
+$$ J^{\langle t \rangle}=Loss(\hat{y}^{\langle t \rangle})   \tag{1.3}$$   
+
+对于$(W_{ya},b_y)$求取梯度比较简单，说明下公式假定输入输出一样$T_x=T_y=τ$，根据（1.2）式我们可以先拆分得到如下两个式子，用$o^{\langle t \rangle}$ 做线程输出的赋值：  
+$$\hat{y}^{\langle t \rangle} = softmax(o^{\langle t \rangle}) \tag{1.4}$$    
+$$o^{\langle t \rangle} =W_{ya} a^{\langle t \rangle} + b_y \tag{1.5}$$     
+
+根据公式（1.3）、（1.4）、（1.5）通过链式法则得到：  
+$$\frac{\partial J}{\partial W_{ya}}=\quad \sum_{t=1}^{τ}\frac{\partial J^{\langle t \rangle}}{\partial W_{ya}}=\quad \sum_{t=1}^{τ}\frac{\partial J^{\langle t \rangle}}{\partial o^{\langle t \rangle}} \frac{\partial o^{\langle t \rangle}}{\partial W_{ya}} \tag{1.4}  $$   
+$$\frac{\partial J}{\partial b_y}=\quad \sum_{t=1}^{τ}\frac{\partial J^{\langle t \rangle}}{\partial b_y}=\quad \sum_{t=1}^{τ}\frac{\partial J^{\langle t \rangle}}{\partial o^{\langle t \rangle}} \frac{\partial o^{\langle t \rangle}}{\partial b_y} \tag{1.5}  $$   
+
+为什么要用 $\frac{\partial J}{\partial o}$ 而不用$\frac{\partial J}{\partial y}$ 呢？因为损失函数可以有很多形式，一般损失函数对于输出$o$求$\frac{\partial J}{\partial o}$都有相应的推导公式，这里举例如果使用的是交叉熵函数：  
+$$J^{\langle t \rangle}=\quad -\sum_{i=1}^{n_y}y_i^{\langle t \rangle}\log \hat{y_i}^{\langle t \rangle} \tag{1.6}$$  
+$其中y_i^t为真实值，\hat{y_i}^{\langle t \rangle}为预测值,i为t时间片输出的向量i位置值$。
+
+这里不再推导交叉熵的倒数公式，有兴趣的可以查看相应文章去推导，通过交叉熵公式可以得到$J$对$o$的倒数如下： 
+$$\frac{\partial J^{\langle t \rangle}}{\partial o^{\langle t \rangle}}=\hat{y}^{\langle t \rangle}- y^{\langle t \rangle} \tag{1.7}$$
+那么（1.4）和（1.5）式分别变为：  
+$$ \frac{\partial J}{\partial W_{ya}}=\quad \sum_{t=1}^{τ}(\hat{y}^{\langle t \rangle}- y^{\langle t \rangle})(a^{\langle t \rangle })^T \tag{1.8}$$  
+$$ \frac{\partial J}{\partial b_y}=\quad \sum_{t=1}^{τ}(\hat{y}^{\langle t \rangle}- y^{\langle t \rangle}) \tag{1.9}$$  
+注意$(a^{\langle t \rangle })^T中T是矩阵的转置，矩阵的求导法则一般是用迹计算，乘函数AB的迹对A求导 结果等于矩阵B的转置，公式如下$。
+$$\frac{\partial tr(AB)}{\partial A} = B^T \tag{1.10}$$ 
+
+而对于$(W_{ax},W_{aa},b_a)$稍微复杂一点，需要引入一个概念BPTT（back-propagation through time）的运算法则，公式如下：  
+
+。。。。
 
 
-
-
-
-
-
-
+## 二、LSTM 长短记忆模型  
+传统的RNN反向传播拥有如下特点：
+- Tanh 输出在-1和1之间
+- 梯度消失
+- 较远的步骤梯度贡献很小
+- 切换其他激活函数后，可能也会导致梯度爆炸  
+  
+为什么需要LSTM：  
+- 普通的RNN的信息不能长久传播（存在于理论上）
+- 引入选择性机制（选择性输出、选择性输入、选择性遗忘）
+- 选择性用门阀控制，使用Sigmoid函数[0,1]
 
 
 
