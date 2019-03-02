@@ -20,20 +20,27 @@ LSTM 与 GRU
 循环神经网络可以看做是RNN单元的重复，对于RNN-CELL有两种比较好的理解方式：  
 1）通过MLP（前馈神经网络）拓扑结构转化：   
 一般网络的MLP拓扑结构非常好理解，如下图为神经网络全连接结构：  
-![Alt text](images/MLP.png)    
+![Alt text](images/MLP.png) 
+图（1-1） 普通MLP网络结构 
+
 $其中输入x=\{x_1,x_2,x_3,...,x_n\}，输出为y=\{y_1,y_2,...,y_j\}，隐含层为a=\{a_1,a_2,...a_k\}。我们把MLP当做一个RNN-CELL单元，并且将向量x和向量y作为在t时刻的输入输出x^{\langle t \rangle}和y^{\langle t \rangle}。将拓扑结构翻转过来后，做多次拼接，如下图。这样就将RNN和前馈神经网络联系起来了$
 ![Alt text](images/RNNByMLP.png)  
+图（1-2） 将MLP翻转拼接后得到的RNN结构  
+
 2）如果以计算单元的方式去理解，可以得到如下所示的运算图形：   
 ![Alt text](images/RNN-CELL.png)  
+图（1-3）: 基本的RNN单元  
+
 运算图形实际上就是展示了RNN单元内部神经网络的实际运算逻辑，对于如上计算单元的实现，可以分为下面几步公式：  
 - 通过上一步输入的隐含状态$a^{[t-1]}$计算当前单元的$a^{[t]}$：  
-$$a^{\langle t \rangle} = \tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)$$ 
+$$a^{\langle t \rangle} = \tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a) \tag{1.1}$$ 
 - 通过当前隐含层$a^{[t]}$计算$\hat{y}^{\langle t \rangle}$
-$$\hat{y}^{\langle t \rangle} = softmax(W_{ya} a^{\langle t \rangle} + b_y)$$  
+$$\hat{y}^{\langle t \rangle} = softmax(W_{ya} a^{\langle t \rangle} + b_y) \tag{1.2}$$  
 上面就是$RNN$单元的一般前向传播公式，$W_{aa},W_{ax},W_{ya}$为对应所要训练的权值矩阵，$b_a,b_y$是偏置。  
-假如当前刻输入为$x^{\langle t \rangle}$，他的向量长度为$(n_x)$，上一时间片输入的隐藏层激活值为$a^{\langle t-1 \rangle}$，设置输出长度为$(n_a)$。那么为了保证计算输出的激活值$a^{\langle t \rangle}$的长度不变，$W_{aa}$的维度必须为$(n_a,n_a)$，$W_{ax}$的维度为$(n_a,n_x)$。同理对于输出$\hat{y}^{\langle t \rangle}$，$W_{ya}$的维度为$(n_y, n_a)$。$b_a,b_y$作为偏置维度分别为$(n_a,1)，(n_y,1)$。  
+- 假如当前刻输入为$x^{\langle t \rangle}$，他的向量长度为$(n_x)$，上一时间片输入的隐藏层激活值为$a^{\langle t-1 \rangle}$，设置输出长度为$(n_a)$。那么为了保证计算输出的激活值$a^{\langle t \rangle}$的长度不变，$W_{aa}$的维度必须为$(n_a,n_a)$，$W_{ax}$的维度为$(n_a,n_x)$。同理对于输出$\hat{y}^{\langle t \rangle}$，$W_{ya}$的维度为$(n_y, n_a)$。$b_a,b_y$作为偏置维度分别为$(n_a,1)，(n_y,1)$。  
 
-在神经网络运算过程中，如果输入多个样本进行前向传播运算，可以使用for循环的方式。也可以使用矩阵运算的方式，这里一次性输入$m$样本做矩阵运算，则输入$x^{\langle t \rangle}$矩阵变为$(n_x,m)$，$a^{\langle t-1 \rangle}$的维度也变为$(n_x,m)$  
+在神经网络运算过程中，如果输入多个样本进行前向传播运算，可以使用for循环的方式。也可以使用矩阵运算的方式，这里一次性输入$m$样本做矩阵运算，则输入$x^{\langle t \rangle}$矩阵变为$(n_x,m)$，$a^{\langle t-1 \rangle}$的维度也变为$(n_x,m)，如下所示为单个RNN单元的前向转播实现：$  
+
 
 ```python
 def rnn_cell_forward(xt, a_prev, parameters):
@@ -50,8 +57,8 @@ def rnn_cell_forward(xt, a_prev, parameters):
                         by   维度为（n_y, 1） 偏置
 
     return:
-        a_next     当前输出的隐藏状态at
-        yt_pred    当前计算的输出y
+        a_next     当前输出的隐藏状态at，维度（n_a, m）
+        yt_pred    当前计算的输出，维度（n_y， m）
         cache      用于反向传播需要的元组集合，(a_next, a_prev, xt, parameters)
     """
     # 从“parameters”获取参数
@@ -72,8 +79,73 @@ def rnn_cell_forward(xt, a_prev, parameters):
     return a_next, yt_pred, cache
 ```
 
-### 1.2 RNN计算
-对RNN-CELL进行重复拼接可以
+### 1.2 RNN前向传播计算（对多个单元进行连接）
+对如上RNN-CELL进行重复拼接得到RNN模型   
+
+![Alt text](images/RNN-Multi.png)  
+图（1-3）: RNN单元重复拼接而成的基本模型，也可以理解成图（1-2）MLP翻转拼接的神经网络结构的计算图  
+
+因此可以实现RNN前向转播，示例代码如下：
+```python
+def rnn_forward(x, a0, parameters):
+    """
+    拼接RNN单元实现RNN的整体前向传播
+    
+    params：
+        x           将所有xt时间输入拼接到一个矩阵中，一次性计算m个样本，因此维度为(n_x,m,T_x)
+        a0          时间步为1的单元输入的隐藏状态是不存在的，因此对其初始化，维度（n_a, m）
+        parameters  存储整个权重的字典，其中权重有：
+                        Wax  维度为（n_a, n_x）与输入xt做矩阵乘法
+                        Waa  维度为（n_a, n_a）与前一个隐藏状态a_prev做矩阵乘法
+                        Wya  维度为（n_y, n_a）与当前隐藏状态a_next做矩阵乘法
+                        ba   维度为（n_a, 1） 偏置
+                        by   维度为（n_y, 1） 偏置
+    
+    返回：
+        a          所有时间步的隐藏状态，维度为(n_a, m, T_x) -> [a1,a2,a3,...,at]
+        y_pred     所有时间步的预测，维度为(n_y, m, T_x) -> [y1,y2,y3,...,yt]
+        caches     为反向传播的保存的元组
+    """
+    
+    # 使用caches 去装载所有cache
+    caches = []
+    
+    # 获取 x 与 Wya 的维度信息，用于构造a和y
+    n_x, m, T_x = x.shape
+    n_y, n_a = parameters["Wya"].shape
+    
+    # 直接采用0矩阵来初始化a与y
+    a = np.zeros([n_a, m, T_x])
+    y_pred = np.zeros([n_y, m, T_x])
+    
+    # 使用外部输入的初始激活值a0进行计算
+    a_next = a0
+    
+    # 使用for循环遍历所有时间
+    for t in range(T_x):
+        # 取出当前时间x[:, :, t]，通过cell计算下一步的激活值a和预测值y，并保留cache
+        # cache 是一个 (a_next, a_prev, xt, parameters) 保留所有信息的元祖
+        a_next, yt_pred, cache = rnn_cell_forward(x[:, :, t], a_next, parameters)
+        
+        # 将t当前a值存起来
+        a[:, :, t] = a_next
+        
+        # 将t当前y值存起来
+        y_pred[:, :, t] = yt_pred
+        
+        # 把cache保存到caches列表中。
+        caches.append(cache)
+    
+    # 全部完成后，把x输入矩阵也全部加入进来，实际上cache中已经存了每个时间步的x了
+    caches = (caches, x)
+    
+    return a, y_pred, caches
+```
+
+### 1.3 RNN反向转播的计算
+
+
+
 
 
 
