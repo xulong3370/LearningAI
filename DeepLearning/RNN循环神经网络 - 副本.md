@@ -178,7 +178,7 @@ $$\frac{\partial AB}{\partial A} = B^T \tag{1.10}$$
 ![Alt text](images/RNN-LOSS.png)  
 图（1-5）: RNN反向传播BPTT
 
-$W是我们要更新的权重，由于W_{ax}和W_{aa}很类似，为了展示BPTT所以统一用W表示：  
+$W是我们要更新的权重，由于W_{ax}和W_{aa}很类似，为了展示BPTT所以统一用W表示：$  
 $$\frac {\partial J}{\partial W} = \sum_{t=1}^{τ} \frac {\partial J^{\langle t \rangle}}{\partial W}=\sum_{t=1}^{τ}  \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}}\frac {\partial a^{\langle t \rangle}}{\partial W} \tag{1.11}$$  
 $其中 a_{t} 是关于W和a_{t−1}的函数，而a_{t−1}又是关于W和a_{t−2}的函数，$继续使用链式法则可以得到：  
 $$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}}\frac {\partial a^{\langle t \rangle}}{\partial a^{\langle k \rangle}} \frac {\partial a^{\langle k \rangle}}{\partial W}  \tag {1.12}$$  
@@ -189,15 +189,15 @@ $$\frac {\partial a^{\langle t \rangle}}{\partial a^{\langle k \rangle}} = \prod
 $$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}} (\prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}})  \frac {\partial a^{\langle k \rangle}}{\partial W}  \tag {1.12}$$ 
 
 由上式子我们可以编写计算单个$RNN-CELL$的 $\frac{ \partial a^{\langle t \rangle} } {\partial W_{ax}}, \frac{ \partial a^{\langle t \rangle} } {\partial W_{aa}},  \frac{ \partial a^{\langle t \rangle} } {\partial b}$的反向传播代码，首先$tanh(u)的导数如下$：  
-$$ \tanh'(u) =(1-\tanh(u)^2) \tag {1.13}$$  
+$$ d\tanh(u) =(1-\tanh(u)^2) \tag {1.13}du$$  
 由式（1.1）并且根据图（1-4）可以计算出：  
 $$ \frac{ \partial a^{\langle t \rangle} } {\partial W_{ax}} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2)x^{{\langle t \rangle}T} \tag {1.14}$$
 
 $$ \frac{ \partial a^{\langle t \rangle} } {\partial W_{aa}} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2)a^{{\langle t-1 \rangle}T} \tag {1.15}$$  
 
-$$ \frac{ \partial a^{\langle t \rangle} } {\partial b_a} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.16}$$  
+$$ \sum_{batch}\frac{ \partial a^{\langle t \rangle} } {\partial b_a} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.16}$$  
 
-$$ \sum_{batch}\frac{ \partial a^{\langle t \rangle} } {\partial x^{\langle t \rangle}} = W_{ax}^T\cdot(1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.17}$$  
+$$ \frac{ \partial a^{\langle t \rangle} } {\partial x^{\langle t \rangle}} = W_{ax}^T\cdot(1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.17}$$  
 
 $$ \frac{ \partial a^{\langle t \rangle} } {\partial a^{\langle t-1 \rangle}} = W_{aa}^T\cdot(1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.18}$$  
 
@@ -209,39 +209,40 @@ def rnn_cell_backward(da_next, cache):
     实现基本的RNN单元的单步反向传播
     
     参数：
-        da_next -- 关于下一个隐藏状态的损失的梯度。
-        cache -- 字典类型，rnn_step_forward()的输出
+        da_next    关于下一个隐藏状态的损失的梯度。
+        cache      字典类型，rnn_step_forward()记录的cache
         
     返回：
-        gradients -- 字典，包含了以下参数：
-                        dx -- 输入数据的梯度，维度为(n_x, m)
-                        da_prev -- 上一隐藏层的隐藏状态，维度为(n_a, m)
-                        dWax -- 输入到隐藏状态的权重的梯度，维度为(n_a, n_x)
-                        dWaa -- 隐藏状态到隐藏状态的权重的梯度，维度为(n_a, n_a)
-                        dba -- 偏置向量的梯度，维度为(n_a, 1)
+        gradients   字典，包含了以下参数：
+                        dx        输入数据的梯度，维度为(n_x, m)
+                        da_prev   上一隐藏层的隐藏状态，维度为(n_a, m)
+                        dWax      输入到隐藏状态的权重的梯度，维度为(n_a, n_x)
+                        dWaa      隐藏状态到隐藏状态的权重的梯度，维度为(n_a, n_a)
+                        dba       偏置向量的梯度，维度为(n_a, 1)
     """
     # 获取cache 的值
     a_next, a_prev, xt, parameters = cache
     
     # 从 parameters 中获取参数
-    Wax = parameters["Wax"]
+    Wax = parameters["Wax"] 
     Waa = parameters["Waa"]
     Wya = parameters["Wya"]
     ba = parameters["ba"]
     by = parameters["by"]
     
-    # 计算tanh相对于a_next的梯度.
+    # 计算tanh相对于a_next的梯度. （1.13）公式
+    # a_next实际上就是 np.tanh(np.dot(Waa, a_prev) + np.dot(Wax, xt) + ba) 计算结果
     dtanh = (1 - np.square(a_next)) * da_next
     
-    # 计算关于Wax损失的梯度
+    # 计算关于Wax损失的梯度 (1.14)
     dxt = np.dot(Wax.T,dtanh)
     dWax = np.dot(dtanh, xt.T)
     
-    # 计算关于Waa损失的梯度
+    # 计算关于Waa损失的梯度 (1.15)
     da_prev = np.dot(Waa.T,dtanh)
     dWaa = np.dot(dtanh, a_prev.T)
     
-    # 计算关于b损失的梯度
+    # 计算关于b损失的梯度 (1.16)
     dba = np.sum(dtanh, keepdims=True, axis=-1)
     
     # 保存这些梯度到字典内
@@ -256,16 +257,16 @@ def rnn_backward(da, caches):
     在整个输入数据序列上实现RNN的反向传播
     
     参数：
-        da -- 所有隐藏状态的梯度，维度为(n_a, m, T_x)
-        caches -- 包含向前传播的信息的元组
+        da        所有隐藏状态的梯度，维度为(n_a, m, T_x)
+        caches    包含向前传播的信息的元组
     
     返回：    
-        gradients -- 包含了梯度的字典：
-                        dx -- 关于输入数据的梯度，维度为(n_x, m, T_x)
-                        da0 -- 关于初始化隐藏状态的梯度，维度为(n_a, m)
-                        dWax -- 关于输入权重的梯度，维度为(n_a, n_x)
-                        dWaa -- 关于隐藏状态的权值的梯度，维度为(n_a, n_a)
-                        dba -- 关于偏置的梯度，维度为(n_a, 1)
+        gradients   包含了梯度的字典：
+                        dx     关于输入数据的梯度，维度为(n_x, m, T_x)
+                        da0    关于初始化隐藏状态的梯度，维度为(n_a, m)
+                        dWax   关于输入权重的梯度，维度为(n_a, n_x)
+                        dWaa   关于隐藏状态的权值的梯度，维度为(n_a, n_a)
+                        dba    关于偏置的梯度，维度为(n_a, 1)
     """
     # 从caches中获取第一个cache（t=1）的值
     caches, x = caches
