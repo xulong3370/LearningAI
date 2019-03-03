@@ -171,12 +171,141 @@ $$\frac{\partial J^{\langle t \rangle}}{\partial o^{\langle t \rangle}}=\hat{y}^
 那么（1.4）和（1.5）式分别变为：  
 $$ \frac{\partial J}{\partial W_{ya}}=\quad \sum_{t=1}^{τ}(\hat{y}^{\langle t \rangle}- y^{\langle t \rangle})(a^{\langle t \rangle })^T \tag{1.8}$$  
 $$ \frac{\partial J}{\partial b_y}=\quad \sum_{t=1}^{τ}(\hat{y}^{\langle t \rangle}- y^{\langle t \rangle}) \tag{1.9}$$  
-注意$(a^{\langle t \rangle })^T中T是矩阵的转置，矩阵的求导法则一般是用迹计算，乘函数AB的迹对A求导 结果等于矩阵B的转置，公式如下$。
-$$\frac{\partial tr(AB)}{\partial A} = B^T \tag{1.10}$$ 
+注意$(a^{\langle t \rangle })^T中T是矩阵的转置，矩阵的求导法则这里不再赘述，乘函数AB对A求导 结果等于矩阵B的转置，公式如下$。
+$$\frac{\partial AB}{\partial A} = B^T \tag{1.10}$$ 
 
-而对于$(W_{ax},W_{aa},b_a)$稍微复杂一点，需要引入一个概念BPTT（back-propagation through time）的运算法则，公式如下：  
+而对于$(W_{ax},W_{aa},b_a)$稍微复杂一点，从RNN的模型可以看出，在反向传播时，在在某一序列位置$t$的梯度损失由当前位置的输出对应的梯度损失和序列索引位置$t+1$时的梯度损失两部分共同决定。对于$W指代(W_{ax},W_{aa})$在某一序列位置$t$的梯度损失需要反向传播一步步的计算。需要引入一个概念BPTT（back-propagation through time）的运算法则:  
+![Alt text](images/RNN-LOSS.png)  
+图（1-5）: RNN反向传播BPTT
 
-。。。。
+$W是我们要更新的权重，由于W_{ax}和W_{aa}很类似，为了展示BPTT所以统一用W表示：  
+$$\frac {\partial J}{\partial W} = \sum_{t=1}^{τ} \frac {\partial J^{\langle t \rangle}}{\partial W}=\sum_{t=1}^{τ}  \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}}\frac {\partial a^{\langle t \rangle}}{\partial W} \tag{1.11}$$  
+$其中 a_{t} 是关于W和a_{t−1}的函数，而a_{t−1}又是关于W和a_{t−2}的函数，$继续使用链式法则可以得到：  
+$$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}}\frac {\partial a^{\langle t \rangle}}{\partial a^{\langle k \rangle}} \frac {\partial a^{\langle k \rangle}}{\partial W}  \tag {1.12}$$  
+而由于图（1-5）可以直观的看到：  
+$$\frac {\partial a^{\langle t \rangle}}{\partial a^{\langle k \rangle}} = \prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}} \tag {1.13}$$  
+因此（1.12）最终变为：  
+
+$$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}} (\prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}})  \frac {\partial a^{\langle k \rangle}}{\partial W}  \tag {1.12}$$ 
+
+由上式子我们可以编写计算单个$RNN-CELL$的 $\frac{ \partial a^{\langle t \rangle} } {\partial W_{ax}}, \frac{ \partial a^{\langle t \rangle} } {\partial W_{aa}},  \frac{ \partial a^{\langle t \rangle} } {\partial b}$的反向传播代码，首先$tanh(u)的导数如下$：  
+$$ \tanh'(u) =(1-\tanh(u)^2) \tag {1.13}$$  
+由式（1.1）并且根据图（1-4）可以计算出：  
+$$ \frac{ \partial a^{\langle t \rangle} } {\partial W_{ax}} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2)x^{{\langle t \rangle}T} \tag {1.14}$$
+
+$$ \frac{ \partial a^{\langle t \rangle} } {\partial W_{aa}} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2)a^{{\langle t-1 \rangle}T} \tag {1.15}$$  
+
+$$ \frac{ \partial a^{\langle t \rangle} } {\partial b_a} = (1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.16}$$  
+
+$$ \sum_{batch}\frac{ \partial a^{\langle t \rangle} } {\partial x^{\langle t \rangle}} = W_{ax}^T\cdot(1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.17}$$  
+
+$$ \frac{ \partial a^{\langle t \rangle} } {\partial a^{\langle t-1 \rangle}} = W_{aa}^T\cdot(1-tanh(W_{aa} a^{\langle t-1 \rangle} + W_{ax} x^{\langle t \rangle} + b_a)^2) \tag {1.18}$$  
+
+
+
+```python
+def rnn_cell_backward(da_next, cache):
+    """
+    实现基本的RNN单元的单步反向传播
+    
+    参数：
+        da_next -- 关于下一个隐藏状态的损失的梯度。
+        cache -- 字典类型，rnn_step_forward()的输出
+        
+    返回：
+        gradients -- 字典，包含了以下参数：
+                        dx -- 输入数据的梯度，维度为(n_x, m)
+                        da_prev -- 上一隐藏层的隐藏状态，维度为(n_a, m)
+                        dWax -- 输入到隐藏状态的权重的梯度，维度为(n_a, n_x)
+                        dWaa -- 隐藏状态到隐藏状态的权重的梯度，维度为(n_a, n_a)
+                        dba -- 偏置向量的梯度，维度为(n_a, 1)
+    """
+    # 获取cache 的值
+    a_next, a_prev, xt, parameters = cache
+    
+    # 从 parameters 中获取参数
+    Wax = parameters["Wax"]
+    Waa = parameters["Waa"]
+    Wya = parameters["Wya"]
+    ba = parameters["ba"]
+    by = parameters["by"]
+    
+    # 计算tanh相对于a_next的梯度.
+    dtanh = (1 - np.square(a_next)) * da_next
+    
+    # 计算关于Wax损失的梯度
+    dxt = np.dot(Wax.T,dtanh)
+    dWax = np.dot(dtanh, xt.T)
+    
+    # 计算关于Waa损失的梯度
+    da_prev = np.dot(Waa.T,dtanh)
+    dWaa = np.dot(dtanh, a_prev.T)
+    
+    # 计算关于b损失的梯度
+    dba = np.sum(dtanh, keepdims=True, axis=-1)
+    
+    # 保存这些梯度到字典内
+    gradients = {"dxt": dxt, "da_prev": da_prev, "dWax": dWax, "dWaa": dWaa, "dba": dba}
+    
+    return gradients
+```
+
+```python
+def rnn_backward(da, caches):
+    """
+    在整个输入数据序列上实现RNN的反向传播
+    
+    参数：
+        da -- 所有隐藏状态的梯度，维度为(n_a, m, T_x)
+        caches -- 包含向前传播的信息的元组
+    
+    返回：    
+        gradients -- 包含了梯度的字典：
+                        dx -- 关于输入数据的梯度，维度为(n_x, m, T_x)
+                        da0 -- 关于初始化隐藏状态的梯度，维度为(n_a, m)
+                        dWax -- 关于输入权重的梯度，维度为(n_a, n_x)
+                        dWaa -- 关于隐藏状态的权值的梯度，维度为(n_a, n_a)
+                        dba -- 关于偏置的梯度，维度为(n_a, 1)
+    """
+    # 从caches中获取第一个cache（t=1）的值
+    caches, x = caches
+    a1, a0, x1, parameters = caches[0]
+    
+    # 获取da与x1的维度信息
+    n_a, m, T_x = da.shape
+    n_x, m = x1.shape
+    
+    # 初始化梯度
+    dx = np.zeros([n_x, m, T_x])
+    dWax = np.zeros([n_a, n_x])
+    dWaa = np.zeros([n_a, n_a])
+    dba = np.zeros([n_a, 1])
+    da0 = np.zeros([n_a, m])
+    da_prevt = np.zeros([n_a, m])
+    
+    # 处理所有时间步
+    for t in reversed(range(T_x)):
+        # 计算时间步“t”时的梯度
+        gradients = rnn_cell_backward(da[:, :, t] + da_prevt, caches[t])
+        
+        #从梯度中获取导数
+        dxt, da_prevt, dWaxt, dWaat, dbat = gradients["dxt"], gradients["da_prev"], gradients["dWax"], gradients["dWaa"], gradients["dba"]
+        
+        # 通过在时间步t添加它们的导数来增加关于全局导数的参数
+        dx[:, :, t] = dxt
+        dWax += dWaxt
+        dWaa += dWaat
+        dba += dbat
+        
+    #将 da0设置为a的梯度，该梯度已通过所有时间步骤进行反向传播
+    da0 = da_prevt
+    
+    #保存这些梯度到字典内
+    gradients = {"dx": dx, "da0": da0, "dWax": dWax, "dWaa": dWaa,"dba": dba}
+    
+    return gradients
+```
+  
 
 
 ## 二、LSTM 长短记忆模型  
@@ -185,11 +314,18 @@ $$\frac{\partial tr(AB)}{\partial A} = B^T \tag{1.10}$$
 - 梯度消失
 - 较远的步骤梯度贡献很小
 - 切换其他激活函数后，可能也会导致梯度爆炸  
-  
+
+为什么RNN会梯度消失和梯度爆炸？  
+
+
 为什么需要LSTM：  
 - 普通的RNN的信息不能长久传播（存在于理论上）
 - 引入选择性机制（选择性输出、选择性输入、选择性遗忘）
 - 选择性用门阀控制，使用Sigmoid函数[0,1]
+
+由于LSTM模型比普通RNN复杂，接下来我不会再用numpy去做基础实现，换一种tensorflow进行代码实现，比较简洁。有兴趣再学习实现细节的可以查看吴恩达deeplearning.ai的课后作业，这里放上所有实现所搬运的GIT地址。  
+
+
 
 
 
