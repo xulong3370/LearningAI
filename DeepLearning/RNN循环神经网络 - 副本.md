@@ -186,7 +186,10 @@ $$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^
 $$\frac {\partial a^{\langle t \rangle}}{\partial a^{\langle k \rangle}} = \prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}} \tag {1.13}$$  
 因此（1.12）最终变为：  
 
-$$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}} (\prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}})  \frac {\partial a^{\langle k \rangle}}{\partial W}  \tag {1.12}$$ 
+$$\frac {\partial J}{\partial W} = \sum_{t=1}^τ \sum_{k=1}^t \frac {\partial J^{\langle t \rangle}}{\partial a^{\langle t \rangle}} (\prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}})  \frac {\partial a^{\langle k \rangle}}{\partial W}  \tag {1.12}$$  
+
+由（1.12）式我们可以得到求$\frac {\partial J}{\partial W}$，转换成了求$\frac {\partial J^{\langle t \rangle}}{\partial W}$，$\frac{\partial a^{\langle i \rangle}}{\partial a^{\langle i-1 \rangle}}$ 与$\frac {\partial a^{\langle k \rangle}}{\partial W}$的值，而对于$\frac {\partial J^{\langle t \rangle}}{\partial W}$我们有如下式：    
+$$ \tag{1.2}$$
 
 由上式子我们可以编写计算单个$RNN-CELL$的 $\frac{ \partial a^{\langle t \rangle} } {\partial W_{ax}}, \frac{ \partial a^{\langle t \rangle} } {\partial W_{aa}},  \frac{ \partial a^{\langle t \rangle} } {\partial b}$的反向传播代码，首先$tanh(u)的导数如下$：  
 $$ d\tanh(u) =(1-\tanh(u)^2) \tag {1.13}du$$  
