@@ -20,7 +20,7 @@ LSTM 与 GRU
 循环神经网络可以看做是RNN单元的重复，对于RNN-CELL有两种比较好的理解方式：  
 1）通过MLP（前馈神经网络）拓扑结构转化：   
 一般网络的MLP拓扑结构非常好理解，如下图为神经网络全连接结构：  
-![Alt text](images/MLP.png) 
+![Alt text](images/MLP.png)  
 图（1-1） 普通MLP网络结构 
 
 $其中输入x=\{x_1,x_2,x_3,...,x_n\}，输出为y=\{y_1,y_2,...,y_j\}，隐含层为a=\{a_1,a_2,...a_k\}。我们把MLP当做一个RNN-CELL单元，并且将向量x和向量y作为在t时刻的输入输出x^{\langle t \rangle}和y^{\langle t \rangle}。将拓扑结构翻转过来后，做多次拼接，如下图。这样就将RNN和前馈神经网络联系起来了$
@@ -83,7 +83,7 @@ def rnn_cell_forward(xt, a_prev, parameters):
 对如上RNN-CELL进行重复拼接得到RNN模型   
 
 ![Alt text](images/RNN-Multi.png)  
-图（1-3）: RNN单元重复拼接而成的基本模型，也可以理解成图（1-2）MLP翻转拼接的神经网络结构的计算图  
+图（1-4）: RNN单元重复拼接而成的基本模型，也可以理解成图（1-2）MLP翻转拼接的神经网络结构的计算图  
 
 因此可以实现RNN前向转播，示例代码如下：
 ```python
@@ -314,7 +314,7 @@ def rnn_backward(da, caches):
   
 
 
-## 二、LSTM 长短记忆模型  
+## 二、LSTM（long short term memory） 长短记忆模型  
 传统的RNN反向传播拥有如下特点：
 - Tanh 输出在-1和1之间
 - 梯度消失
@@ -333,10 +333,62 @@ $$\prod_{i=k+1}^{t} \frac {\partial a^{\langle i \rangle}}{\partial a^{\langle i
 - 选择性用门阀控制，使用Sigmoid函数[0,1]
 - LSTM可以抑制梯度消失（梯度爆炸比较简单，可以通过裁剪抑制）
 
-由于LSTM模型比普通RNN复杂，接下来我不会再用numpy去做基础实现，换一种Tensorflow进行代码实现，比较简洁。有兴趣研究实现细节的可以查看吴恩达deeplearning.ai的课后作业，这里放上所有实现所搬运的GIT地址。  
+由于LSTM模型比普通RNN复杂，接下来我不会再用numpy去做基础实现，换一种Tensorflow进行代码实现，比较简洁。有兴趣研究实现细节的可以查看吴恩达deeplearning.ai的课后作业，这里放上之前RNN吴恩达的实现搬运的GIT地址。  
+
+首先我们之前实现过RNN单元图（1-3）、（1-4）简化为如下图形： 
+
+![Alt text](images/RNN2.png)  
+图（2-1）RNN简化图  
+这里引用了网络上比较经典的RNN结构图，用来简化LSTM的说明。其中$h_{t}$是隐藏层hidden layer，跟上述图和公式所用的$a^{\langle t \rangle}$是对等的，只是换了个表示。  
+
+可以看到图（2-1）中，将（1-3）、（1-4）的内环神经网络内部单元模型简化成了一个$\tanh$表示。  
+
+LSTM同样是这个结构，但是在原有的$\tanh$层上添加更多的层，而不是把隐藏层$h_{t}$和输入$x_{t}$简单的乘以权重求和的倒输出，变成如下结构：  
+
+![Alt text](images/LSTM.png)  
+图（2-2）简化的LSTM 
+
+每个黄色的框代表一个全链接神经网络，例如如下图：  
+![Alt text](images/NeuralNetwork.png)  
+图（2-3）一个全链接网络，类似图（1-1）  
+
+接下来分别对LSTM 单元进行解释：  
+
+1）记忆传送单元    
+LSTM的核心理念实际上是用一个向量权重$C$用来保存整个RNN序列的信息，$C$经过整个时间步后会学习并保存整个序列的信息与特征，类似传送带。由于上面只做一些少量的线性交互，使得数据流传保持变化不会很大。  
+
+![Alt text](images/LSTMcore.png)  
+图（2-4）LSTM 核心CELL
+
+
+可以看到权重传送带上，拥有两运算器，一个乘法器一个加法器。用来遗忘和更新$C$权重。更新的权重值全部来源于某个门选择性输出，门GATE的控制又通过一个[0,1]矩阵的乘法器控制，类似MASK掩码的方式。最好的方式是使用激活函数Sigmoid生成MASK。
+
+2）遗忘门    
+![Alt text](images/forgetgate.png)  
+图（2-5）遗忘门  
+
+上一个输入的隐藏状态$h_{t-1}$与输入$x_{t}$通过一次拼接成一个矩阵，使用行叠加成一个矩阵。  
+
+$$f_t=σ(W_{fh}\cdot h_{t-1}+W_{fx}\cdot x_{t} + b_f) = σ(W_f\cdot [h_{t-1},x_t] + b_f) \tag{2.1}$$  
+
+其中 $[h_{t-1},x_t]=\begin{bmatrix} h_{t-1} \\ x_t \end{bmatrix} ，如果h_{t-1}维度为(n_h, m)，x_t的维度为(n_x, m)，m为样本数。我们可以将h_{t-1},x_t的行维度相叠加。这样W_{fh}和W_{fx}就合成一个维度为(n_h,n_h+n_x)的矩阵W_f$  
+
+可以看出输入和上一个隐藏层通过一个Sigmod激活函数输出一个MASK矩阵$f_t$，与$C_{t-1}$状态相乘，过滤掉某些状态。因此称之为遗忘门。注意以下并不是做矩阵的乘法，而是做对应元素相乘。  
+
+$$ f_t * C_{t-1} = 
+\left[
+\begin{matrix}
+ 1      & 0      & \cdots & 1      \\
+ 0      & 1      & \cdots & 0      \\
+ \vdots & \vdots & \ddots & \vdots \\
+ 1      & 1      & \cdots & 0      \\
+\end{matrix}
+\right] * C_{t-1} \tag{2.2}  
+$$  
 
 
 
+3）输入门  
 
 
 
